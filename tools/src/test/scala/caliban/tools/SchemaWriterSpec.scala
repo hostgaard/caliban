@@ -15,7 +15,8 @@ object SchemaWriterSpec extends ZIOSpecDefault {
     scalarMappings: Map[String, String] = Map.empty,
     isEffectTypeAbstract: Boolean = false,
     preserveInputNames: Boolean = false,
-    addDerives: Boolean = false
+    addDerives: Boolean = false,
+    envForDerives: Option[String] = None
   ): Task[String] = Parser
     .parseQuery(schema.stripMargin)
     .flatMap(doc =>
@@ -29,13 +30,14 @@ object SchemaWriterSpec extends ZIOSpecDefault {
             Some(scalarMappings),
             isEffectTypeAbstract,
             preserveInputNames,
-            addDerives
+            addDerives,
+            envForDerives
           ),
           Some(".scalafmt-for-test.conf")
         )
     )
 
-  val assertions = List(
+  val assertions: List[(String, Task[String], String)] = List(
     (
       "type with field parameter",
       gen("""
@@ -1010,6 +1012,50 @@ object SchemaWriterSpec extends ZIOSpecDefault {
           |
           |}
           |""".stripMargin
+    ),
+    (
+      "union types needs correct derives",
+      gen(
+        """
+        |schema {
+        |  query: Query
+        |}
+        |
+        |union AllErrors = Foo | Bar
+        |
+        |type Foo {
+        |  message: String!
+        |}
+        |
+        |type Bar {
+        |  message: String!
+        |}
+        |
+        |type Query {
+        |  errorUnion: AllErrors!
+        |}""",
+        addDerives = true,
+        envForDerives = Some("Env")
+      ),
+      """import Types._
+        |
+        |object Types {
+        |
+        |  final case class Foo(message: String) extends AllErrors derives Operations.EnvSchema.SemiAuto
+        |  final case class Bar(message: String) extends AllErrors derives Operations.EnvSchema.SemiAuto
+        |
+        |  sealed trait AllErrors extends scala.Product with scala.Serializable derives Operations.EnvSchema.SemiAuto
+        |
+        |}
+        |
+        |object Operations {
+        |  object EnvSchema extends caliban.schema.SchemaDerivation[Env]
+        |
+        |  final case class Query(
+        |    errorUnion: zio.UIO[AllErrors]
+        |  ) derives Operations.EnvSchema.SemiAuto
+        |
+        |}""".stripMargin
     )
   )
 

@@ -23,22 +23,20 @@ object SchemaWriter {
     envForDerives: Option[String] = None
   ): String = {
 
-    val (derivesSchema, derivesSchemaAndArgBuilder, envSchemaDerivation, derivesEnvSchema) =
+    val (derivesSchema, derivesSchemaAndArgBuilder, envSchemaDerivation) =
       (addDerives, envForDerives) match {
-        case (false, _)                                        => ("", "", "", "")
+        case (false, _)                                        => ("", "", "")
         case (true, Some(env)) if !env.equalsIgnoreCase("Any") =>
           (
-            " derives caliban.schema.Schema.SemiAuto",
+            " derives Operations.EnvSchema.SemiAuto",
             " derives caliban.schema.Schema.SemiAuto, caliban.schema.ArgBuilder",
-            s"object EnvSchema extends caliban.schema.SchemaDerivation[${safeName(env)}]\n\n",
-            " derives Operations.EnvSchema.SemiAuto"
+            s"object EnvSchema extends caliban.schema.SchemaDerivation[${safeName(env)}]\n\n"
           )
         case (true, _)                                         =>
           (
             " derives caliban.schema.Schema.SemiAuto",
             " derives caliban.schema.Schema.SemiAuto, caliban.schema.ArgBuilder",
-            "",
-            " derives caliban.schema.Schema.SemiAuto"
+            ""
           )
       }
 
@@ -112,7 +110,7 @@ object SchemaWriter {
       s"""
          |${writeTypeAnnotations(op)}final case class ${op.name}${generic(op, isRootDefinition = true)}(
          |${op.fields.map(c => writeRootField(c, op)).mkString(",\n")}
-         |)$derivesEnvSchema""".stripMargin
+         |)$derivesSchema""".stripMargin
 
     def writeSubscriptionField(field: FieldDefinition, od: ObjectTypeDefinition): String =
       "%s:%s ZStream[Any, Nothing, %s]".format(
@@ -125,7 +123,7 @@ object SchemaWriter {
       s"""
          |${writeTypeAnnotations(op)}final case class ${op.name}(
          |${op.fields.map(c => writeSubscriptionField(c, op)).mkString(",\n")}
-         |)$derivesEnvSchema""".stripMargin
+         |)$derivesSchema""".stripMargin
 
     def writeObject(typedef: ObjectTypeDefinition, extend: List[String]): String = {
       val extendRendered = extend match {
@@ -134,7 +132,7 @@ object SchemaWriter {
       }
       s"""${writeTypeAnnotations(typedef)}final case class ${typedef.name}${generic(typedef)}(${typedef.fields
         .map(field => writeField(field, inheritedFromInterface(typedef, field).getOrElse(typedef), isMethod = false))
-        .mkString(", ")})$extendRendered$derivesEnvSchema"""
+        .mkString(", ")})$extendRendered$derivesSchema"""
     }
 
     def writeInputObject(typedef: InputObjectTypeDefinition): String = {
@@ -167,7 +165,7 @@ object SchemaWriter {
 
     def writeInterface(interface: InterfaceTypeDefinition): String =
       s"""@GQLInterface
-        ${writeTypeAnnotations(interface)}sealed trait ${interface.name} extends scala.Product with scala.Serializable $derivesEnvSchema {
+        ${writeTypeAnnotations(interface)}sealed trait ${interface.name} extends scala.Product with scala.Serializable $derivesSchema {
          ${interface.fields.map(field => writeField(field, interface, isMethod = true)).mkString("\n")}
         }
        """
